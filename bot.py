@@ -63,42 +63,23 @@ class FantacalcioScraper:
         return options
     
     def start_driver(self):
-        """Avvia il driver Chrome ottimizzato per Railway"""
+        """Versione semplificata per Railway con Chromium"""
         try:
-            # Metodo 1: WebDriver Manager con cache pulita
-            logger.info("Avvio ChromeDriver per Railway...")
+            options = Options()
+            options.add_argument('--headless=new')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
             
-            # Pulisci cache se necessario
-            cache_path = os.path.expanduser("~/.wdm")
-            if os.path.exists(cache_path) and os.environ.get('RAILWAY_CLEAR_CACHE', 'false').lower() == 'true':
-                import shutil
-                shutil.rmtree(cache_path)
-                logger.info("Cache WebDriver Manager pulita")
-            
-            # Installa ChromeDriver
-            service = Service(ChromeDriverManager().install())
-            
-            # Verifica se il file è eseguibile
-            driver_path = service.path
-            if not os.access(driver_path, os.X_OK):
-                os.chmod(driver_path, 0o755)
-                logger.info(f"Permessi di esecuzione aggiunti a: {driver_path}")
-            
-            self.driver = webdriver.Chrome(service=service, options=self.options)
-            
-            # Anti-detection
+            # Su Railway con Chromium, il driver è già nel PATH
+            self.driver = webdriver.Chrome(options=options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-                "userAgent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            })
-            
-            self.wait = WebDriverWait(self.driver, 20)
-            logger.info("ChromeDriver avviato con successo su Railway")
+            self.wait = WebDriverWait(self.driver, 15)
             return True
             
         except Exception as e:
-            logger.error(f"Errore avvio driver: {e}")
-            return self._fallback_driver_setup()
+            logger.error(f"Errore driver: {e}")
+            return False
     
     def _fallback_driver_setup(self):
         """Metodi di fallback per Railway"""
