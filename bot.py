@@ -22,45 +22,129 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class FantacalcioScraper:
-    def __init__(self, headless=True):
-        """
-        Inizializza il scraper con opzioni Chrome ottimizzate per cloud
-        """
-        self.options = Options()
-        
-        # Configurazioni per hosting cloud
-        self.options.add_argument('--headless')
-        self.options.add_argument('--no-sandbox')
-        self.options.add_argument('--disable-dev-shm-usage')
-        self.options.add_argument('--disable-gpu')
-        self.options.add_argument('--disable-extensions')
-        self.options.add_argument('--disable-plugins')
-        self.options.add_argument('--disable-images')  
-        self.options.add_argument('--disable-javascript')  
-        self.options.add_argument('--window-size=1920,1080')
-        self.options.add_argument('--disable-blink-features=AutomationControlled')
-        self.options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        self.options.add_experimental_option('useAutomationExtension', False)
-        
-        # User agent per evitare detection
-        self.options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        
+    def __init__(self):
         self.driver = None
         self.wait = None
+        self.options = self._configure_railway_chrome_options()
+    
+    def _configure_railway_chrome_options(self):
+        """Configura Chrome per Railway (ambiente containerizzato)"""
+        options = Options()
+        
+        # ESSENZIALI per Railway/Docker
+        options.add_argument('--headless=new')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--disable-web-security')
+        options.add_argument('--disable-features=VizDisplayCompositor')
+        
+        # Configurazioni per container
+        options.add_argument('--remote-debugging-port=9222')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-plugins')
+        options.add_argument('--disable-background-timer-throttling')
+        options.add_argument('--disable-backgrounding-occluded-windows')
+        options.add_argument('--disable-renderer-backgrounding')
+        
+        # Ottimizzazioni memoria per Railway
+        options.add_argument('--memory-pressure-off')
+        options.add_argument('--disable-background-networking')
+        options.add_argument('--disable-default-apps')
+        options.add_argument('--disable-sync')
+        
+        # Gestione schermo virtuale
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--start-maximized')
+        
+        # User agent realistico
+        options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        return options
     
     def start_driver(self):
-        """Avvia il driver Chrome con configurazione cloud"""
+        """Avvia il driver Chrome ottimizzato per Railway"""
         try:
-            # Usa webdriver-manager per gestire ChromeDriver automaticamente
+            # Metodo 1: WebDriver Manager con cache pulita
+            logger.info("Avvio ChromeDriver per Railway...")
+            
+            # Pulisci cache se necessario
+            cache_path = os.path.expanduser("~/.wdm")
+            if os.path.exists(cache_path) and os.environ.get('RAILWAY_CLEAR_CACHE', 'false').lower() == 'true':
+                import shutil
+                shutil.rmtree(cache_path)
+                logger.info("Cache WebDriver Manager pulita")
+            
+            # Installa ChromeDriver
             service = Service(ChromeDriverManager().install())
             
+            # Verifica se il file è eseguibile
+            driver_path = service.path
+            if not os.access(driver_path, os.X_OK):
+                os.chmod(driver_path, 0o755)
+                logger.info(f"Permessi di esecuzione aggiunti a: {driver_path}")
+            
             self.driver = webdriver.Chrome(service=service, options=self.options)
+            
+            # Anti-detection
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            self.wait = WebDriverWait(self.driver, 15)  # Timeout più lungo per server lenti
+            self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+                "userAgent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            
+            self.wait = WebDriverWait(self.driver, 20)
+            logger.info("ChromeDriver avviato con successo su Railway")
             return True
+            
         except Exception as e:
-            logger.error(f"Errore nell'avvio del driver: {e}")
+            logger.error(f"Errore avvio driver: {e}")
+            return self._fallback_driver_setup()
+    
+    def _fallback_driver_setup(self):
+        """Metodi di fallback per Railway"""
+        try:
+            # Fallback 1: Usa ChromeDriver di sistema
+            logger.info("Tentativo fallback: ChromeDriver di sistema")
+            
+            # Cerca ChromeDriver nel PATH
+            chrome_paths = [
+                '/usr/bin/chromedriver',
+                '/usr/local/bin/chromedriver',
+                '/opt/chromedriver',
+                'chromedriver'
+            ]
+            
+            for path in chrome_paths:
+                try:
+                    service = Service(path)
+                    self.driver = webdriver.Chrome(service=service, options=self.options)
+                    self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                    self.wait = WebDriverWait(self.driver, 20)
+                    logger.info(f"Driver di sistema avviato: {path}")
+                    return True
+                except:
+                    continue
+            
+            # Fallback 2: ChromeDriver senza Service
+            logger.info("Tentativo fallback: Senza Service")
+            self.driver = webdriver.Chrome(options=self.options)
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            self.wait = WebDriverWait(self.driver, 20)
+            logger.info("Driver avviato senza Service")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Tutti i fallback falliti: {e}")
             return False
+    
+    def quit_driver(self):
+        """Chiude il driver in modo sicuro"""
+        try:
+            if self.driver:
+                self.driver.quit()
+                logger.info("Driver chiuso correttamente")
+        except Exception as e:
+            logger.error(f"Errore chiusura driver: {e}")
     
     def login_angular_app(self, url, username, password):
         """
