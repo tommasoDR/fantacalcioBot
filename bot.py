@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class FantacalcioScraper:
+class FantacalcioScraper(headless=True):
     def __init__(self):
         self.driver = None
         self.wait = None
