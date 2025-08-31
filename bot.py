@@ -1,6 +1,4 @@
 import os
-import time
-import asyncio
 import logging
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -8,9 +6,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import time
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+import asyncio
 
 # Configurazione logging
 logging.basicConfig(
@@ -27,15 +29,14 @@ class FantacalcioScraper:
         self.options = Options()
         
         # Configurazioni per hosting cloud
-        if headless:
-            self.options.add_argument('--headless')
+        self.options.add_argument('--headless')
         self.options.add_argument('--no-sandbox')
         self.options.add_argument('--disable-dev-shm-usage')
         self.options.add_argument('--disable-gpu')
         self.options.add_argument('--disable-extensions')
         self.options.add_argument('--disable-plugins')
-        self.options.add_argument('--disable-images')  # Velocizza il caricamento
-        self.options.add_argument('--disable-javascript')  # Solo se non serve JS dinamico
+        self.options.add_argument('--disable-images')  
+        self.options.add_argument('--disable-javascript')  
         self.options.add_argument('--window-size=1920,1080')
         self.options.add_argument('--disable-blink-features=AutomationControlled')
         self.options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -50,12 +51,10 @@ class FantacalcioScraper:
     def start_driver(self):
         """Avvia il driver Chrome con configurazione cloud"""
         try:
-            # Per PythonAnywhere o sistemi Linux
-            chrome_path = '/usr/bin/google-chrome'
-            if os.path.exists(chrome_path):
-                self.options.binary_location = chrome_path
+            # Usa webdriver-manager per gestire ChromeDriver automaticamente
+            service = Service(ChromeDriverManager().install())
             
-            self.driver = webdriver.Chrome(options=self.options)
+            self.driver = webdriver.Chrome(service=service, options=self.options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             self.wait = WebDriverWait(self.driver, 15)  # Timeout più lungo per server lenti
             return True
@@ -343,14 +342,6 @@ def main():
     
     # Prova a ottenere il token dalle variabili d'ambiente
     BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-    
-    if not BOT_TOKEN:
-        # Fallback: prova a leggere da file (per testing locale)
-        try:
-            with open('bot_token.txt', 'r') as f:
-                BOT_TOKEN = f.read().strip()
-        except FileNotFoundError:
-            pass
     
     print("🚀 Avvio del bot con token configurato...")
     
