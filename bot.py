@@ -21,8 +21,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class FantacalcioScraper(headless=True):
-    def __init__(self):
+class FantacalcioScraper:
+    def __init__(self, headless=True):
         self.driver = None
         self.wait = None
         self.options = self._configure_railway_chrome_options()
